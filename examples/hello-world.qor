@@ -1,0 +1,9 @@
+# My first QOR program
+print("Hello, QOR!")
+
+x = 10
+y = 20
+result = x + y
+
+print("The sum is:")
+print(result)
