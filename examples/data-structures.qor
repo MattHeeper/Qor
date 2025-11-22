@@ -1,0 +1,26 @@
+# QOR Data Structures Demo
+
+print("=== Lists ===")
+numbers = [1, 2, 3, 4, 5]
+print(numbers)
+
+first = numbers[0]
+print(first)
+
+print("=== Dictionaries ===")
+person = {"name": "Ali", "age": 25, "city": "Tehran"}
+print(person)
+
+name = person["name"]
+print(name)
+
+print("=== List Operations ===")
+fruits = ["apple", "banana", "cherry"]
+count = len(fruits)
+print(count)
+
+print("=== Loop through List ===")
+for fruit in fruits:
+    print(fruit)
+
+print("=== Done ===")

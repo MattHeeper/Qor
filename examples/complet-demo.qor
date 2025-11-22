@@ -1,0 +1,43 @@
+# QOR Complete Demo - All Features
+
+print("=== QOR Language Demo ===")
+
+# Variables and Math
+x = 10
+y = 20
+sum = x + y
+print("Sum:")
+print(sum)
+
+# Functions
+function square(n):
+    return n * n
+
+result = square(5)
+print("Square of 5:")
+print(result)
+
+# Conditionals
+if result > 20:
+    print("Result is big!")
+else:
+    print("Result is small")
+
+# Loops
+print("Counting:")
+for i in range(5):
+    print(i)
+
+# Advanced Math
+print("Math Functions:")
+root = sqrt(16)
+print(root)
+
+area = pi * pow(3, 2)
+print(area)
+
+angle = pi / 6
+sine_val = sin(angle)
+print(sine_val)
+
+print("=== Demo Complete ===")

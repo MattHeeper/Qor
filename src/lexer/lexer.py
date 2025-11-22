@@ -55,13 +55,13 @@ TOKEN_TYPES = [
     ('STRING',     r'"[^"]*"'),          # String literals
     ('NUMBER',     r'\d+(\.\d+)?'),      # Integer and float literals
     
-    # Operators
+    # Operators (POWER must come before MULTIPLY!)
+    ('POWER',      r'\*\*'),             # Power (must come before MULTIPLY)
     ('PLUS',       r'\+'),               # Addition
     ('MINUS',      r'-'),                # Subtraction
     ('MULTIPLY',   r'\*'),               # Multiplication
     ('DIVIDE',     r'/'),                # Division
     ('MODULO',     r'%'),                # Modulo
-    ('POWER',      r'\*\*'),             # Power (must come before MULTIPLY)
     
     # Delimiters
     ('ASSIGN',     r'='),                # Assignment
@@ -69,8 +69,11 @@ TOKEN_TYPES = [
     ('RPAREN',     r'\)'),               # Right parenthesis
     ('LBRACKET',   r'\['),               # Left bracket
     ('RBRACKET',   r'\]'),               # Right bracket
+    ('LBRACE',     r'\{'),               # Left brace
+    ('RBRACE',     r'\}'),               # Right brace
     ('COMMA',      r','),                # Comma
     ('COLON',      r':'),                # Colon
+    ('DOT',        r'\.'),               # Dot (for method calls)
     
     # Identifiers
     ('ID',         r'[a-zA-Z_]\w*'),     # Identifiers
@@ -244,6 +247,22 @@ else:
     print(f"\nTokens ({len(tokens5)}):")
     for i, (token_type, token_value) in enumerate(tokens5, 1):
         print(f"  {i}. {token_type:12} -> {token_value!r}")
+    
+    # Test 6: Lists and Dicts
+    print("\n[Test 6] Lists and Dictionaries")
+    print("-" * 60)
+    test6 = 'numbers = [1, 2, 3]\nperson = {"name": "Ali", "age": 25}'
+    print(f"Source:\n{test6}")
+    
+    lexer6 = Lexer(test6)
+    tokens6 = lexer6.tokenize()
+    
+    print(f"\nTokens ({len(tokens6)}):")
+    for i, (token_type, token_value) in enumerate(tokens6, 1):
+        if token_value == '\n':
+            print(f"  {i}. {token_type:12} -> '\\n'")
+        else:
+            print(f"  {i}. {token_type:12} -> {token_value!r}")
     
     print("\n" + "=" * 60)
     print("✅ All lexer v3.0 tests completed!")

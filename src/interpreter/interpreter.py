@@ -1,23 +1,32 @@
 """
-QOR Language Interpreter v1.0
+QOR Language Interpreter v2.5
 ------------------------------
 This module implements the execution engine for the QOR language.
 It traverses the Abstract Syntax Tree (AST) and executes the program.
 
-Features:
-- Variable storage (symbol table)
-- Expression evaluation
-- Arithmetic operations (+, -, *, /)
-- Print statements
-- Runtime error handling
+Version 2.5 adds support for:
+- Built-in mathematical functions (sqrt, sin, cos, etc.)
+- Mathematical constants (pi, e)
+- User-defined functions
+- If/elif/else statements
+- For and while loops
+- Comparison and logical operators
+- Return statements with proper control flow
 
 Author: QOR Development Team
 License: MIT
-Version: 1.0.0
+Version: 2.5.0
 """
 
 from typing import Any, Dict, List
 import sys
+import math
+
+
+class ReturnValue(Exception):
+    """Exception used to implement return statements."""
+    def __init__(self, value):
+        self.value = value
 
 
 class RuntimeError(Exception):
@@ -25,33 +34,116 @@ class RuntimeError(Exception):
     pass
 
 
+class Function:
+    """Represents a user-defined function."""
+    def __init__(self, name: str, params: List[str], body: List, closure: Dict):
+        self.name = name
+        self.params = params
+        self.body = body
+        self.closure = closure  # Save enclosing scope
+
+
 class Interpreter:
     """
     Execution engine for the QOR programming language.
     
-    The interpreter walks through the AST and executes each node,
-    maintaining a symbol table for variable storage.
-    
     Attributes:
-        variables (Dict[str, Any]): Symbol table storing variable values
+        global_vars (Dict[str, Any]): Global symbol table
+        local_vars (List[Dict[str, Any]]): Stack of local scopes
+        functions (Dict[str, Function]): User-defined functions
+        builtins (Dict[str, callable]): Built-in functions
         output (List[str]): Captured output for testing
     """
     
     def __init__(self):
-        """Initialize interpreter with empty symbol table."""
-        self.variables: Dict[str, Any] = {}
+        """Initialize interpreter with empty symbol tables."""
+        self.global_vars: Dict[str, Any] = {}
+        self.local_vars: List[Dict[str, Any]] = []
+        self.functions: Dict[str, Function] = {}
+        self.builtins: Dict[str, Any] = {}
         self.output: List[str] = []
+        
+        # Register built-in functions
+        self._register_builtins()
+    
+    def _register_builtins(self) -> None:
+        """Register built-in mathematical functions."""
+        # Built-in math functions
+        self.builtins = {
+            # Basic math
+            'abs': abs,
+            'round': round,
+            'min': min,
+            'max': max,
+            
+            # Math module functions
+            'sqrt': math.sqrt,
+            'pow': pow,
+            'exp': math.exp,
+            'log': math.log,
+            'log10': math.log10,
+            
+            # Trigonometry
+            'sin': math.sin,
+            'cos': math.cos,
+            'tan': math.tan,
+            'asin': math.asin,
+            'acos': math.acos,
+            'atan': math.atan,
+            
+            # Floor/Ceil
+            'floor': math.floor,
+            'ceil': math.ceil,
+            
+            # List/String methods
+            'len': len,
+            'str': str,
+            'int': int,
+            'float': float,
+        }
+        
+        # Add constants to global vars
+        self.global_vars['pi'] = math.pi
+        self.global_vars['e'] = math.e
+    
+    @property
+    def variables(self) -> Dict[str, Any]:
+        """Get current variable scope."""
+        if self.local_vars:
+            return self.local_vars[-1]
+        return self.global_vars
+    
+    def get_variable(self, name: str) -> Any:
+        """Get variable value from current scope."""
+        # Check local scopes (most recent first)
+        for scope in reversed(self.local_vars):
+            if name in scope:
+                return scope[name]
+        
+        # Check global scope
+        if name in self.global_vars:
+            return self.global_vars[name]
+        
+        raise RuntimeError(f"Undefined variable: '{name}'")
+    
+    def set_variable(self, name: str, value: Any) -> None:
+        """Set variable in current scope."""
+        if self.local_vars:
+            self.local_vars[-1][name] = value
+        else:
+            self.global_vars[name] = value
+    
+    def push_scope(self, initial_vars: Dict[str, Any] = None) -> None:
+        """Push a new local scope."""
+        self.local_vars.append(initial_vars or {})
+    
+    def pop_scope(self) -> None:
+        """Pop the current local scope."""
+        if self.local_vars:
+            self.local_vars.pop()
     
     def visit(self, node) -> Any:
-        """
-        Dispatch method to visit appropriate node type.
-        
-        Args:
-            node: AST node to visit
-            
-        Returns:
-            Any: Result of visiting the node
-        """
+        """Dispatch method to visit appropriate node type."""
         method_name = f'visit_{type(node).__name__}'
         method = getattr(self, method_name, self.generic_visit)
         return method(node)
@@ -61,63 +153,27 @@ class Interpreter:
         raise RuntimeError(f"No visit method for {type(node).__name__}")
     
     def visit_NumberNode(self, node) -> float:
-        """
-        Visit a number literal node.
-        
-        Args:
-            node: NumberNode
-            
-        Returns:
-            float: Numeric value
-        """
+        """Visit a number literal node."""
         return node.value
     
     def visit_StringNode(self, node) -> str:
-        """
-        Visit a string literal node.
-        
-        Args:
-            node: StringNode
-            
-        Returns:
-            str: String value
-        """
+        """Visit a string literal node."""
+        return node.value
+    
+    def visit_BooleanNode(self, node) -> bool:
+        """Visit a boolean literal node."""
         return node.value
     
     def visit_VariableNode(self, node) -> Any:
-        """
-        Visit a variable reference node.
-        
-        Args:
-            node: VariableNode
-            
-        Returns:
-            Any: Value stored in variable
-            
-        Raises:
-            RuntimeError: If variable is not defined
-        """
-        if node.name not in self.variables:
-            raise RuntimeError(f"Undefined variable: '{node.name}'")
-        
-        return self.variables[node.name]
+        """Visit a variable reference node."""
+        return self.get_variable(node.name)
     
-    def visit_BinaryOpNode(self, node) -> float:
-        """
-        Visit a binary operation node.
-        
-        Args:
-            node: BinaryOpNode
-            
-        Returns:
-            float: Result of operation
-            
-        Raises:
-            RuntimeError: For division by zero or unknown operators
-        """
+    def visit_BinaryOpNode(self, node) -> Any:
+        """Visit a binary operation node."""
         left = self.visit(node.left)
         right = self.visit(node.right)
         
+        # Arithmetic operators
         if node.operator == '+':
             return left + right
         elif node.operator == '-':
@@ -128,177 +184,310 @@ class Interpreter:
             if right == 0:
                 raise RuntimeError("Division by zero")
             return left / right
+        elif node.operator == '%':
+            return left % right
+        elif node.operator == '**':
+            return left ** right
+        
+        # Comparison operators
+        elif node.operator == '==':
+            return left == right
+        elif node.operator == '!=':
+            return left != right
+        elif node.operator == '<':
+            return left < right
+        elif node.operator == '>':
+            return left > right
+        elif node.operator == '<=':
+            return left <= right
+        elif node.operator == '>=':
+            return left >= right
+        
+        # Logical operators
+        elif node.operator == 'and':
+            return left and right
+        elif node.operator == 'or':
+            return left or right
+        
         else:
             raise RuntimeError(f"Unknown operator: {node.operator}")
     
-    def visit_AssignmentNode(self, node) -> None:
-        """
-        Visit an assignment node.
+    def visit_UnaryOpNode(self, node) -> Any:
+        """Visit a unary operation node."""
+        operand = self.visit(node.operand)
         
-        Args:
-            node: AssignmentNode
-        """
+        if node.operator == '-':
+            return -operand
+        elif node.operator == 'not':
+            return not operand
+        else:
+            raise RuntimeError(f"Unknown unary operator: {node.operator}")
+    
+    def visit_AssignmentNode(self, node) -> None:
+        """Visit an assignment node."""
         value = self.visit(node.value)
-        self.variables[node.variable] = value
+        self.set_variable(node.variable, value)
     
     def visit_PrintNode(self, node) -> None:
-        """
-        Visit a print statement node.
-        
-        Args:
-            node: PrintNode
-        """
+        """Visit a print statement node."""
         value = self.visit(node.expression)
         output = str(value)
         
-        # Store for testing
         self.output.append(output)
-        
-        # Print to console
         print(output)
     
-    def interpret(self, ast: List) -> None:
-        """
-        Execute a list of AST nodes.
+    def visit_FunctionDefNode(self, node) -> None:
+        """Visit a function definition node."""
+        # Store function with current scope as closure
+        func = Function(node.name, node.params, node.body, dict(self.global_vars))
+        self.functions[node.name] = func
+    
+    def visit_FunctionCallNode(self, node) -> Any:
+        """Visit a function call node."""
+        # Check for built-in functions first
+        if node.name in self.builtins:
+            args = [self.visit(arg) for arg in node.args]
+            try:
+                return self.builtins[node.name](*args)
+            except Exception as e:
+                raise RuntimeError(f"Error calling built-in function '{node.name}': {e}")
         
-        Args:
-            ast (List): List of statement nodes to execute
-        """
+        # Check if user-defined function exists
+        if node.name not in self.functions:
+            raise RuntimeError(f"Undefined function: '{node.name}'")
+        
+        func = self.functions[node.name]
+        
+        # Evaluate arguments
+        args = [self.visit(arg) for arg in node.args]
+        
+        # Check argument count
+        if len(args) != len(func.params):
+            raise RuntimeError(
+                f"Function '{node.name}' expects {len(func.params)} arguments, "
+                f"got {len(args)}"
+            )
+        
+        # Create new scope with parameters
+        local_scope = dict(zip(func.params, args))
+        self.push_scope(local_scope)
+        
+        try:
+            # Execute function body
+            result = None
+            for stmt in func.body:
+                self.visit(stmt)
+        except ReturnValue as ret:
+            result = ret.value
+        finally:
+            self.pop_scope()
+        
+        return result
+    
+    def visit_ReturnNode(self, node) -> None:
+        """Visit a return statement node."""
+        if node.value:
+            value = self.visit(node.value)
+        else:
+            value = None
+        
+        raise ReturnValue(value)
+    
+    def visit_IfNode(self, node) -> None:
+        """Visit an if/elif/else statement node."""
+        # Evaluate main condition
+        condition = self.visit(node.condition)
+        
+        if condition:
+            # Execute then body
+            for stmt in node.then_body:
+                self.visit(stmt)
+        else:
+            # Check elif conditions
+            executed = False
+            for elif_condition, elif_body in node.elif_parts:
+                if self.visit(elif_condition):
+                    for stmt in elif_body:
+                        self.visit(stmt)
+                    executed = True
+                    break
+            
+            # Execute else if no elif matched
+            if not executed and node.else_body:
+                for stmt in node.else_body:
+                    self.visit(stmt)
+    
+    def visit_ForNode(self, node) -> None:
+        """Visit a for loop node."""
+        # Evaluate iterable
+        iterable = self.visit(node.iterable)
+        
+        # Execute loop
+        for value in iterable:
+            self.set_variable(node.variable, value)
+            for stmt in node.body:
+                self.visit(stmt)
+    
+    def visit_WhileNode(self, node) -> None:
+        """Visit a while loop node."""
+        while self.visit(node.condition):
+            for stmt in node.body:
+                self.visit(stmt)
+    
+    def visit_RangeNode(self, node) -> range:
+        """Visit a range node."""
+        start = int(self.visit(node.start))
+        stop = int(self.visit(node.stop))
+        step = int(self.visit(node.step))
+        
+        return range(start, stop, step)
+    
+    def visit_ListNode(self, node) -> list:
+        """Visit a list node."""
+        return [self.visit(element) for element in node.elements]
+    
+    def visit_DictNode(self, node) -> dict:
+        """Visit a dictionary node."""
+        result = {}
+        for key_node, value_node in node.pairs:
+            key = self.visit(key_node)
+            value = self.visit(value_node)
+            result[key] = value
+        return result
+    
+    def visit_IndexNode(self, node) -> Any:
+        """Visit an index operation."""
+        obj = self.visit(node.obj)
+        index = self.visit(node.index)
+        
+        try:
+            return obj[index]
+        except (KeyError, IndexError, TypeError) as e:
+            raise RuntimeError(f"Index error: {e}")
+    
+    def visit_MethodCallNode(self, node) -> Any:
+        """Visit a method call."""
+        obj = self.visit(node.obj)
+        args = [self.visit(arg) for arg in node.args]
+        
+        # Get method from object
+        try:
+            method = getattr(obj, node.method)
+            return method(*args)
+        except AttributeError:
+            raise RuntimeError(f"Object has no method '{node.method}'")
+        except Exception as e:
+            raise RuntimeError(f"Error calling method '{node.method}': {e}")
+    
+    def interpret(self, ast: List) -> None:
+        """Execute a list of AST nodes."""
         for node in ast:
             self.visit(node)
 
 
-# Integration module to connect Lexer -> Parser -> Interpreter
-class QOR:
-    """
-    Main QOR language interface.
-    
-    Combines lexer, parser, and interpreter for easy execution.
-    """
-    
-    def __init__(self):
-        """Initialize QOR runtime."""
-        self.interpreter = Interpreter()
-    
-    def run(self, code: str) -> None:
-        """
-        Execute QOR source code.
-        
-        Args:
-            code (str): QOR source code to execute
-        """
-        # Import lexer and parser
-        # Note: In real usage, these would be proper imports
-        from lexer import Lexer
-        from parser import Parser
-        
-        # Lexical analysis
-        lexer = Lexer(code)
-        tokens = lexer.tokenize()
-        
-        # Syntax analysis
-        parser = Parser(tokens)
-        ast = parser.parse()
-        
-        # Execution
-        self.interpreter.interpret(ast)
-    
-    def get_variable(self, name: str) -> Any:
-        """Get value of a variable."""
-        return self.interpreter.variables.get(name)
-    
-    def get_output(self) -> List[str]:
-        """Get captured output."""
-        return self.interpreter.output
-
-
 # Testing
 if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    
+    # Add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    
+    from lexer.lexer import Lexer
+    from parser.parser import Parser
+    
     print("=" * 60)
-    print("QOR INTERPRETER v1.0 - TEST SUITE")
+    print("QOR INTERPRETER v2.5 - WITH MATH FUNCTIONS")
     print("=" * 60)
     
-    # We'll test with manually created AST nodes
-    # Import AST node classes
-    from parser import (
-        NumberNode, StringNode, VariableNode,
-        BinaryOpNode, AssignmentNode, PrintNode
-    )
-    
-    interpreter = Interpreter()
-    
-    # Test 1: Simple number
-    print("\n[Test 1] Evaluate Number")
+    # Test 1: Basic math functions
+    print("\n[Test 1] Basic Math Functions")
     print("-" * 60)
-    node1 = NumberNode('42')
-    result1 = interpreter.visit(node1)
-    print(f"42 => {result1}")
+    code1 = """x = abs(-10)
+print(x)
+y = sqrt(16)
+print(y)"""
     
-    # Test 2: Variable assignment
-    print("\n[Test 2] Variable Assignment")
-    print("-" * 60)
-    assign_node = AssignmentNode('x', NumberNode('10'))
-    interpreter.visit(assign_node)
-    print(f"x = 10")
-    print(f"Variables: {interpreter.variables}")
+    print(f"Code:\n{code1}\n")
+    print("Output:")
     
-    # Test 3: Arithmetic
-    print("\n[Test 3] Arithmetic Operations")
-    print("-" * 60)
-    # x = 10 + 5
-    expr = BinaryOpNode(NumberNode('10'), '+', NumberNode('5'))
-    result3 = interpreter.visit(expr)
-    print(f"10 + 5 => {result3}")
+    interpreter1 = Interpreter()
+    lexer1 = Lexer(code1)
+    tokens1 = lexer1.tokenize()
+    parser1 = Parser(tokens1)
+    ast1 = parser1.parse()
+    interpreter1.interpret(ast1)
     
-    # Test 4: Variable reference
-    print("\n[Test 4] Variable Reference")
+    # Test 2: Pi and power
+    print("\n[Test 2] Pi and Power")
     print("-" * 60)
-    # y = x + 3 (where x = 10)
-    var_ref = VariableNode('x')
-    expr4 = BinaryOpNode(var_ref, '+', NumberNode('3'))
-    assign4 = AssignmentNode('y', expr4)
-    interpreter.visit(assign4)
-    print(f"y = x + 3 => y = {interpreter.variables['y']}")
-    print(f"Variables: {interpreter.variables}")
+    code2 = """radius = 5
+area = pi * pow(radius, 2)
+print(area)"""
     
-    # Test 5: Print statement
-    print("\n[Test 5] Print Statement")
-    print("-" * 60)
-    print_node = PrintNode(StringNode('"Hello, QOR!"'))
-    print("Executing: print(\"Hello, QOR!\")")
-    interpreter.visit(print_node)
+    print(f"Code:\n{code2}\n")
+    print("Output:")
     
-    # Test 6: Complex expression with operator precedence
-    print("\n[Test 6] Operator Precedence")
-    print("-" * 60)
-    # result = 10 + 5 * 2 (should be 20, not 30)
-    mul_expr = BinaryOpNode(NumberNode('5'), '*', NumberNode('2'))
-    add_expr = BinaryOpNode(NumberNode('10'), '+', mul_expr)
-    assign6 = AssignmentNode('result', add_expr)
-    interpreter.visit(assign6)
-    print(f"result = 10 + 5 * 2")
-    print(f"result = {interpreter.variables['result']} (expected: 20)")
+    interpreter2 = Interpreter()
+    lexer2 = Lexer(code2)
+    tokens2 = lexer2.tokenize()
+    parser2 = Parser(tokens2)
+    ast2 = parser2.parse()
+    interpreter2.interpret(ast2)
     
-    # Test 7: Division by zero (error handling)
-    print("\n[Test 7] Error Handling - Division by Zero")
+    # Test 3: Trigonometry
+    print("\n[Test 3] Trigonometry")
     print("-" * 60)
-    try:
-        div_expr = BinaryOpNode(NumberNode('10'), '/', NumberNode('0'))
-        interpreter.visit(div_expr)
-    except RuntimeError as e:
-        print(f"✅ Caught error: {e}")
+    code3 = """angle = pi / 4
+sine = sin(angle)
+print(sine)"""
     
-    # Test 8: Undefined variable (error handling)
-    print("\n[Test 8] Error Handling - Undefined Variable")
+    print(f"Code:\n{code3}\n")
+    print("Output:")
+    
+    interpreter3 = Interpreter()
+    lexer3 = Lexer(code3)
+    tokens3 = lexer3.tokenize()
+    parser3 = Parser(tokens3)
+    ast3 = parser3.parse()
+    interpreter3.interpret(ast3)
+    
+    # Test 4: Lists
+    print("\n[Test 4] Lists")
     print("-" * 60)
-    try:
-        undefined_var = VariableNode('undefined')
-        interpreter.visit(undefined_var)
-    except RuntimeError as e:
-        print(f"✅ Caught error: {e}")
+    code4 = """numbers = [1, 2, 3, 4, 5]
+print(numbers)
+first = numbers[0]
+print(first)"""
+    
+    print(f"Code:\n{code4}\n")
+    print("Output:")
+    
+    interpreter4 = Interpreter()
+    lexer4 = Lexer(code4)
+    tokens4 = lexer4.tokenize()
+    parser4 = Parser(tokens4)
+    ast4 = parser4.parse()
+    interpreter4.interpret(ast4)
+    
+    # Test 5: Dictionaries
+    print("\n[Test 5] Dictionaries")
+    print("-" * 60)
+    code5 = """person = {"name": "Ali", "age": 25}
+print(person)
+name = person["name"]
+print(name)"""
+    
+    print(f"Code:\n{code5}\n")
+    print("Output:")
+    
+    interpreter5 = Interpreter()
+    lexer5 = Lexer(code5)
+    tokens5 = lexer5.tokenize()
+    parser5 = Parser(tokens5)
+    ast5 = parser5.parse()
+    interpreter5.interpret(ast5)
     
     print("\n" + "=" * 60)
-    print("✅ All interpreter tests completed!")
+    print("✅ All math tests completed!")
     print("=" * 60)
-    print(f"\nFinal symbol table: {interpreter.variables}")
-    print(f"Captured output: {interpreter.output}")
